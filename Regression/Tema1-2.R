@@ -25,23 +25,23 @@ datos <- Default
 mutateFunction <- function(x){
   ifelse(x=="Yes", 1,0)
 }
-
+# una forma
 try(
   datos <- datos %>%
-  dplyr::select(default, balance)
+  dplyr::select(default, balance) %>%
+  dplyr::mutate(default = ifelse(default == "Yes", 1, 0) ) 
 )
-datos$default %>%
-  dplyr::mutate(mutateFunction)
-
+  
+# otra forma
 datos <- datos[, c(1,3)] %>%
   #datos$default <- recode(datos$default, No = 0, Yes = 1)
   mutate(datos$default = ifelse(datos$default=="Yes", 1, 0))
-
+#otra mas
 datos$default <- as.numeric(
   str_replace(datos$default, "No", "0")
 )
 datos$default[is.na(datos$default)] <- 1
-
+# aplicamos la regresion lineal
 MLP <- lm(default ~ balance, data = datos)
 summary(MLP)
 summ(MLP, digits=4)
@@ -99,3 +99,22 @@ modelo %>%
 modelog <- glm(default ~ balance, data = datos, family = "binomial")
 summary(modelo)
 summ(modelo)
+
+# ejercicio
+# importacion de los datos ----
+salarios <- read.csv("Bases/Salary_dataset.csv", check.names = TRUE)
+# es una regresion lineal simple
+summary(salarios)
+rls1 <- lm(
+  formula = salarios$Salary ~ salarios$YearsExperience,
+  data = salarios
+)
+
+summ(rls1)
+# R^2 = 0.96 hay una correlacion alta
+# p < 0.05 se rechaza Ho y se acepta H1 que es que beta-1 es mayor a cero
+
+# regresion multiple
+# importacion de los datos ----
+carros <- read.csv("Bases/car_price_prediction.csv", check.names = TRUE)
+summary(carros)
