@@ -6,13 +6,14 @@
 pacman::p_load(
   "tidyverse",
   "lmtest",
-  "heaven",
+  "BiocManager",
   "foreign",
   "tseries",
   "car",
   "mctest",
   "readxl",
-  "jtools"
+  "jtools",
+  "heaven"
 )
 
 # regresion multiple
@@ -31,6 +32,7 @@ carros <- read.csv("Bases/car_price_prediction.csv", check.names = TRUE)
 summary(carros)
 ## Limpieza de datos ----
 which(is.na(carros), arr.ind=TRUE) # encuentra los NAs
+
 # Levy column has NAs like -
 str_replace(carros$Levy, "-", "0")
 carros$Levy <- as.numeric(
@@ -63,12 +65,15 @@ carros <- carros %>%
 
 ## ejemplo para calculo multivariado ----
 # seleccionar variables independientes (regresoras)
+# https://es.stackoverflow.com/questions/304145/al-usar-el-comando-select-en-r-me-arroja-el-error-unused-error
 mis_carros <- carros %>%
-  select(
+  dplyr::select(
     Price,
     Engine.volume,
     Millas,
-    Prod..year
+    Prod..year,
+    Cylinders,
+    Airbags
     )
 ## visualizacion de la informacion ----
 ### grafico de dispersion ----
@@ -82,8 +87,11 @@ mis_carros %>%
   ggplot(aes(x = Valor, y = Price))+
   geom_point()+
   facet_wrap(~Variable)
+
 pairs(mis_carros)
+
 # hay un valores extremos, habra que trabajar la BD para acotarla
+# quitar outliners
 mis_carros %>%
   filter(
     (Price >=10000 & Price <= 100000) &
@@ -105,16 +113,16 @@ mis_carros %>%
     x = "",
     y = "Precio del vehiculo en USD"
   )
-#pairs(mis_carros)
+pairs(mis_carros)
 # renombrare las columnas para que se mas comodo
 mis_carros <- carros %>%
-  select(
+  dplyr::select(
     Price,
     Engine.volume,
     Millas,
     Prod..year
   ) %>%
-  rename(
+  dplyr::rename(
     Precio = Price,
     Tam.Motor = Engine.volume,
     Millas = Millas,
@@ -128,7 +136,7 @@ MLR = lm(
   Precio ~ `Tam.Motor` + Millas + `Año`,
   data = 
     mis_carros %>%
-      filter(
+    dplyr::filter(
         (Precio >=10000 & Precio <= 100000) &
           (Millas < 1000000) &
           (`Tam.Motor` < 10)
@@ -154,12 +162,12 @@ summ(MLR)
 # validacion del modelo ----
 ## Multicolinealidad ----
 mis_carros %>%
-  filter(
+  dplyr::filter(
     (Precio >=10000 & Precio <= 100000) &
       (Millas < 1000000) &
       (`Tam.Motor` < 10) 
   )%>%
-  select(-Precio) %>%
+  dplyr::select(-Precio) %>%
   cor()
 # se miden los coeficientes de correlacion entre variables
 # si los valores superan el -0.7 o 0.7 hay una gran correlacion y entonces no se
@@ -173,7 +181,7 @@ mis_carros %>%
 # independientes se correlacionan fuertemente
 vif(MLR) # tienen multicolinealidad debil
 
-# indice de condicion
+# indice de condicion (mas importante)
 # 0 no hay multicolinealidad
 # 0 < < 10 multicolinialidad debil
 # 10 < < 30 multicolinialidad moderada
@@ -187,23 +195,33 @@ dwtest(MLR) # p > 0.05 se rechaza Ho que dice que la autocorrelacion es menor a 
 # se acepta H1 es verdad que la autocorrelacion e mayor a 0
 # creando el filtro
 fCar2 <- mis_carros %>%
-  filter(
+  dplyr::filter(
     (Precio >=10000 & Precio <= 100000) &
       (Millas < 1000000) &
       (`Tam.Motor` < 10)
   )
     
-cor(fCar2, MLR$residuals)
 # esta prueba es mas importante
-bptest(MLR)
+# prueba de autocorrelacion de cualquier orden
+# p > 0.05 se rechaza Ho que dice que la autocorrelacion es menor a 0
+# se acepta H1 es verdad que la autocorrelacion e mayor a 0
+bgtest(MLR)
+# se divide el segmento en 2 y dice que del segmento 1 al 2 hay incremento de varianza
+# pero se observa el cambio df1 = df2 por lo que no hay cambio de varianza entre los segmentos
+cor(fCar2, MLR$residuals)
 
-gqtest(RLS, point = 0.5)
-## normalidad ----
-jarque.bera.test(RLS$residuals)
-adf.test(RLS$residuals)
+### Heterocedasticidad ----
+bptest(MLR)
+# Ho es que hay homocedasticidad si p > 0.05
+# se rechaza Ho y se acepta H1 por p < 0.05 y existe heterocedasticidad
+gqtest(MLR, point = 0.5)
+
+### normalidad ----
+jarque.bera.test(MLR$residuals)
+adf.test(MLR$residuals)
 
 # prediccion ----
-prediccion <- predict(RLS,
+prediccion <- predict(MLR,
                       newdata = data.frame(
                         "area" = c(10000, 150000),
                         interval = "confidence"
